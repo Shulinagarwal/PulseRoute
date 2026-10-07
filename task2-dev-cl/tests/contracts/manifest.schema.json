@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PulseRoute submission manifest revision 6",
+  "description": "Written by deploy.sh for the deployment it just deployed. Each value is the identifier the corresponding AWS API accepts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "prefix",
+    "endpoint",
+    "region",
+    "account",
+    "topic",
+    "key",
+    "functions",
+    "queues",
+    "dlqs",
+    "tables",
+    "callers"
+  ],
+  "properties": {
+    "prefix": {
+      "description": "The PULSEROUTE_PREFIX of the deployment this manifest describes.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{2,24}$"
+    },
+    "endpoint": {
+      "const": "http://aws:4566"
+    },
+    "region": {
+      "const": "us-east-1"
+    },
+    "account": {
+      "const": "111111111111"
+    },
+    "topic": {
+      "description": "SNS topic ARN.",
+      "$ref": "#/$defs/name"
+    },
+    "key": {
+      "description": "ARN of the deployment's customer managed KMS key.",
+      "type": "string",
+      "pattern": "^arn:aws:kms:us-east-1:111111111111:key/[A-Za-z0-9-]+$"
+    },
+    "functions": {
+      "description": "Lambda function names (not ARNs).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publisher",
+        "fulfillment",
+        "analytics",
+        "replay"
+      ],
+      "properties": {
+        "publisher": {
+          "$ref": "#/$defs/name"
+        },
+        "fulfillment": {
+          "$ref": "#/$defs/name"
+        },
+        "analytics": {
+          "$ref": "#/$defs/name"
+        },
+        "replay": {
+          "$ref": "#/$defs/name"
+        }
+      }
+    },
+    "queues": {
+      "description": "Main SQS queue URLs, keyed by consumer.",
+      "$ref": "#/$defs/consumerPair"
+    },
+    "dlqs": {
+      "description": "Dead-letter SQS queue URLs, keyed by consumer.",
+      "$ref": "#/$defs/consumerPair"
+    },
+    "tables": {
+      "description": "DynamoDB table names, keyed by consumer.",
+      "$ref": "#/$defs/consumerPair"
+    },
+    "callers": {
+      "description": "Access keys of the three caller IAM users.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publisher",
+        "operator",
+        "outsider"
+      ],
+      "properties": {
+        "publisher": {
+          "$ref": "#/$defs/credentials"
+        },
+        "operator": {
+          "$ref": "#/$defs/credentials"
+        },
+        "outsider": {
+          "$ref": "#/$defs/credentials"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "consumerPair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fulfillment",
+        "analytics"
+      ],
+      "properties": {
+        "fulfillment": {
+          "$ref": "#/$defs/name"
+        },
+        "analytics": {
+          "$ref": "#/$defs/name"
+        }
+      }
+    },
+    "credentials": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "access_key_id",
+        "secret_access_key"
+      ],
+      "properties": {
+        "access_key_id": {
+          "$ref": "#/$defs/name"
+        },
+        "secret_access_key": {
+          "$ref": "#/$defs/name"
+        }
+      }
+    }
+  }
+}

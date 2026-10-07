@@ -1,0 +1,117 @@
+services:
+  main:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: verifier
+    command: ["sleep", "infinity"]
+    depends_on:
+      runner:
+        condition: service_healthy
+      image-build:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_completed_successfully
+    environment:
+      AWS_ENDPOINT_URL: http://aws:4566
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_REGION: us-east-1
+      PULSEROUTE_RUNNER: http://runner:8088
+      PULSEROUTE_PREFIX: ${PULSEROUTE_PREFIX:-pulseroute}
+    volumes:
+      - submission-data:/workspace/submission
+      - submission-data:/runner/source/submission:ro
+      - config:/workspace/config:ro
+    networks:
+      - verifier-control
+      - workload
+
+  runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    command: ["python3", "/opt/pulseroute-runner.py"]
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    environment:
+      AWS_ENDPOINT_URL: http://aws:4566
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_REGION: us-east-1
+      PULSEROUTE_PREFIX: ${PULSEROUTE_PREFIX:-pulseroute}
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8088/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - submission-data:/runner/source/submission:ro
+      - runner-work:/workspace/submission
+      - config:/workspace/config:ro
+    networks:
+      - verifier-control
+      - workload
+
+  image-build:
+    image: mirror.gcr.io/library/docker:27.5.1-cli@sha256:851f91d241214e7c6db86513b270d58776379aacc5eb9c4a87e5b47115e3065c
+    command: ["/bin/sh", "/application/build.sh"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./application:/application:ro
+    networks:
+      - workload
+    restart: "no"
+
+  bootstrap:
+    image: public.ecr.aws/lambda/python:3.12@sha256:8a1fd022123cfc44acab0b8447d0ba46f2b385ec51ee15c9074a72627b6f4797
+    entrypoint: ["python"]
+    command: ["/bootstrap.py"]
+    environment:
+      AWS_ENDPOINT_URL: http://aws:4566
+      PULSEROUTE_CONFIG_DIR: /config
+    depends_on:
+      floci:
+        condition: service_healthy
+    volumes:
+      - ./bootstrap.py:/bootstrap.py:ro
+      - config:/config
+    networks:
+      - workload
+    restart: "no"
+
+  floci:
+    image: floci/floci:2.1.0@sha256:f5aa8c18302cedb4f2385f5c4e455b3efc77fee6bf7b6e5d1712b2817ba102db
+    environment:
+      FLOCI_HOSTNAME: aws
+      FLOCI_DEFAULT_REGION: us-east-1
+      FLOCI_DOCKER_DOCKER_HOST: unix:///var/run/docker.sock
+      FLOCI_DOCKER_RESOURCE_NAMESPACE: ${COMPOSE_PROJECT_NAME}
+      FLOCI_SERVICES_DOCKER_NETWORK: ${COMPOSE_PROJECT_NAME}_workload
+      FLOCI_SERVICES_LAMBDA_DOCKER_NETWORK: ${COMPOSE_PROJECT_NAME}_workload
+      FLOCI_SERVICES_LAMBDA_DOCKER_HOST_OVERRIDE: aws
+      FLOCI_SERVICES_S3_GLOBAL_BUCKET_NAMESPACE: "true"
+      FLOCI_SERVICES_IAM_ENFORCEMENT_ENABLED: "true"
+      FLOCI_SERVICES_S3_ENFORCE_AUTH: "true"
+      FLOCI_STORAGE_MODE: persistent
+      FLOCI_STORAGE_PERSISTENT_PATH: /app/data
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - floci-data:/app/data
+    networks:
+      workload:
+        aliases: [aws]
+    restart: unless-stopped
+
+networks:
+  verifier-control:
+    internal: true
+  workload:
+    name: ${COMPOSE_PROJECT_NAME}_workload
+    internal: true
+
+volumes:
+  floci-data: {}
+  config: {}
+  submission-data: {}
+  runner-work: {}
